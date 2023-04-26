@@ -15,10 +15,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
+import static java.util.stream.IntStream.range;
 
 @Service
 @RequiredArgsConstructor
@@ -36,22 +38,17 @@ public class MinMaxPrizeService {
                 .forEach(producerSetEntry -> {
                     var producer = producerSetEntry.getKey();
                     var movies = producerSetEntry.getValue();
-                    movies.sort(Comparator.comparing(Movie::getYear));
 
-                    var interval = generateInterval(movies);
-                    var producerResponse = ProducerResponse.builder()
-                            .producer(producer.getName())
-                            .interval(interval)
-                            .previousWin(movies.get(0).getYear())
-                            .followingWin(movies.get(movies.size() - 1).getYear())
-                            .build();
+                    var producerIntervals = generateProducerIntervals(producer, movies);
 
-                    if(validatedInterval.containsKey(interval)) {
-                        validatedInterval.get(interval).add(producerResponse);
-                    } else {
-                        var producerResponseList = new HashSet<ProducerResponse>();
-                        producerResponseList.add(producerResponse);
-                        validatedInterval.put(interval, producerResponseList);
+                    for(var producerResponse : producerIntervals) {
+                        if(validatedInterval.containsKey(producerResponse.getInterval())) {
+                            validatedInterval.get(producerResponse.getInterval()).add(producerResponse);
+                        } else {
+                            var producerResponseList = new HashSet<ProducerResponse>();
+                            producerResponseList.add(producerResponse);
+                            validatedInterval.put(producerResponse.getInterval(), producerResponseList);
+                        }
                     }
                 });
 
@@ -71,7 +68,17 @@ public class MinMaxPrizeService {
                 .collect(groupingBy(MovieProducer::getProducer, mapping(MovieProducer::getMovie, toList())));
     }
 
-    private Long generateInterval(List<Movie> movies) {
-        return movies.get(movies.size() - 1).getYear() - movies.get(0).getYear();
+    private List<ProducerResponse> generateProducerIntervals(Producer producer,  List<Movie> movies) {
+        movies.sort(Comparator.comparing(Movie::getYear));
+        return range(0, movies.size() - 1)
+                .mapToObj(index -> {
+                    var interval = movies.get(index + 1).getYear() - movies.get(index).getYear();
+                    return ProducerResponse.builder()
+                            .producer(producer.getName())
+                            .interval(interval)
+                            .previousWin(movies.get(index).getYear())
+                            .followingWin(movies.get(index + 1).getYear())
+                            .build();
+                }).collect(Collectors.toList());
     }
 }
